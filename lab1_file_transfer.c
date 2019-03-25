@@ -10,6 +10,7 @@
 #include <netdb.h>
 #include <errno.h>
 #include <time.h>
+#include <math.h>
 
 void error(const char *msg)
 {
@@ -70,7 +71,7 @@ void ucp_echo_ser(int sockfd, char* msg)
 
 						// print log
 						count_size = count_size + sizeof(buffer);
-						if(count_size > part) {
+						if(count_size >= part) {
 							count_size = count_size - part;
 							++count;
 							time_t rawtime;
@@ -113,7 +114,7 @@ void tcp_echo_ser(int sockfd, char* msg)
 	struct sockaddr_in cli_addr;
 	char buffer[1024];
 	int newsockfd, n;
-	
+
 	clilen = sizeof(cli_addr);
 	newsockfd = accept(sockfd,
 			(struct sockaddr *) &cli_addr, &clilen);
@@ -124,7 +125,7 @@ void tcp_echo_ser(int sockfd, char* msg)
 	if(!strcmp(buffer, "start\n")) {
 		bzero(buffer,1024);
 		strcpy(buffer, msg);
-		if(buffer[0] == '/') {
+		if(buffer[0] == '/' || buffer[0] == '.') {
 			// img
 			n = write(newsockfd, "img", 3);
 			if (n < 0) error("ERROR writing to socket");
@@ -159,7 +160,7 @@ void tcp_echo_ser(int sockfd, char* msg)
 
 					// print log
 					count_size = count_size + sizeof(buffer);
-					if(count_size > part) {
+					if(count_size >= part) {
 						count_size = count_size - part;
 						++count;
 						time_t rawtime;
@@ -188,17 +189,57 @@ void tcp_echo_ser(int sockfd, char* msg)
 			}  
 		}
 		else {
-			n = write(newsockfd, "msg", 3);
-			if (n < 0) error("ERROR writing to socket");
-			n = write(newsockfd, buffer, 1023);
-			if (n < 0) error("ERROR writing to socket");
+			int size = strlen(buffer);
+			int part = round(size/20);
+
+			int count = 0;
+			int count_size = 0;
+			// record length of pointer p
+			int str_p = 0;
+			// use pointer p to send one part of message
+			char *p = buffer;
+			while(1) {
+				// send buffer to client 
+				n = send(newsockfd, p, part, 0); 
+				if (n < 0) {  
+					printf("Send Failed!\n");  
+					break;  
+				}  
+				if(str_p >= strlen(buffer)) break;
+				str_p += n;
+				if(str_p == n) {
+					printf("Send Log\n");
+					continue;
+				}
+				p += n;
+				// print log
+				time_t rawtime;
+				struct tm *timeinfo;
+				time ( &rawtime );
+				timeinfo = localtime ( &rawtime );
+
+				++count;
+				if(count < 20) {
+					printf("%d%% %d/%d/%d %d:%d:%d\n", count*5, 
+							timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
+							timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+				}
+			}
+
+			// print final log
+			time_t rawtime;
+			struct tm *timeinfo;
+			time ( &rawtime );
+			timeinfo = localtime ( &rawtime );
+			printf("100%% %d/%d/%d %d:%d:%d\n", 
+					timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
+					timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 			printf("I send a message: %s\n",buffer);
 		}
+		close(newsockfd);
+		close(sockfd);
 	}
-	close(newsockfd);
-	close(sockfd);
 }
-
 void udp_cli(int sockfd, int portno)
 {
 	int n;
@@ -209,7 +250,7 @@ void udp_cli(int sockfd, int portno)
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = INADDR_ANY;
 	servaddr.sin_port = htons(portno);
-	
+
 	printf("Type \"start\" to get start: ");
 	bzero(buffer,1024);
 	fgets(buffer, sizeof(buffer), stdin);
@@ -277,8 +318,7 @@ void tcp_cli(int sockfd)
 			printf("File:\t%s Can Not Open To Write!\n", file_name);  
 			exit(1);  
 		}  
-		while(n = recv(sockfd, buffer, sizeof(buffer), 0))  
-		{  
+		while(n = recv(sockfd, buffer, sizeof(buffer), 0)) {  
 			if (n < 0) {  
 				printf("Recieve Data From Server Failed!\n");  
 				break;  
@@ -294,10 +334,19 @@ void tcp_cli(int sockfd)
 		fclose(fp);  
 	}
 	else {
-		// skip "msg" in front of the message
-		strcpy(buffer, buffer+3);
+		char msg[1024];
+		bzero(msg, 1024);
+		bzero(buffer, sizeof(buffer));
+		while(n = recv(sockfd, buffer, sizeof(buffer), 0)) {
+			if (n < 0) {  
+				printf("Recieve Data From Server Failed!\n");  
+				break;  
+			} 
+			strcat(msg, buffer);
+			bzero(buffer, sizeof(buffer));
+		}
 		printf("The message is: ");
-		printf("%s\n", buffer);
+		printf("%s\n", msg);
 	}
 	close(sockfd);
 }

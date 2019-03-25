@@ -18,7 +18,7 @@ void error(const char *msg)
 	exit(1);
 }
 
-void ucp_echo_ser(int sockfd, char* msg)
+void udp_echo_ser(int sockfd, char* msg)
 {
 	char buffer[1024];
 	struct sockaddr_in peeraddr;
@@ -27,137 +27,130 @@ void ucp_echo_ser(int sockfd, char* msg)
 
 	peerlen = sizeof(peeraddr);
 	memset(buffer, 0, sizeof(buffer));
-//while(1) {
 	n = recvfrom(sockfd, buffer, sizeof(buffer), 0,
 			(struct sockaddr *)&peeraddr, &peerlen);
-//	printf("%d\n",n);
-//	if (n < 0) error("ERROR reading from socket");
-//	else if(n > 0)
-//	{
-		//		if(!strcmp(buffer, "start\n")) {
-		bzero(buffer,1024);
-		strcpy(buffer, msg);
-		if(buffer[0] == '/' || buffer[0] == '.') {
-			// img
-			//n = write(newsockfd, "img", 3);
-			n = sendto(sockfd, "img", 3, 0, (struct sockaddr *)&peeraddr, peerlen);
-			if (n < 0) error("ERROR writing to socket");
-			char file_name[1024];  
-			bzero(file_name, sizeof(file_name));  
-			strcpy(file_name, buffer);  
-			FILE *fp = fopen(file_name, "r");  
-			if (fp == NULL) {  
-				printf("File:\t%s Not Found!\n", file_name);  
-			}  
-			else {
-				// store the size of fp
-				fseek(fp, 0, SEEK_END);
-				int size = ftell(fp);
-				fseek(fp, 0, SEEK_SET);
-				// print total size
-				printf("Total size of file: %d\n",size);
-				// use part to get size of every 5%
-				int part = size/20;
+	bzero(buffer,1024);
+	strcpy(buffer, msg);
+	if(buffer[0] == '/' || buffer[0] == '.') {
+		// img
+		n = sendto(sockfd, "img", 3, 0, (struct sockaddr *)&peeraddr, peerlen);
+		if (n < 0) error("ERROR writing to socket");
+		char file_name[1024];  
+		bzero(file_name, sizeof(file_name));  
+		strcpy(file_name, buffer);  
+		FILE *fp = fopen(file_name, "r");  
+		if (fp == NULL) {  
+			printf("File:\t%s Not Found!\n", file_name);  
+		}  
+		else {
+			// store the size of fp
+			fseek(fp, 0, SEEK_END);
+			int size = ftell(fp);
+			fseek(fp, 0, SEEK_SET);
+			// print total size
+			printf("Total size of file: %d\n",size);
+			// use part to get size of every 5%
+			int part = size/20;
 
-				bzero(buffer, sizeof(buffer));  
-				int file_block_length = 0;  
-				int count = 0;
-				int count_size = 0;
-				while( (file_block_length = fread(buffer, sizeof(char), sizeof(buffer), fp)) > 0) {  
-					// send buffer to client
-					if (sendto(sockfd, buffer, file_block_length, 0, (struct sockaddr *)&peeraddr, peerlen) < 0) {
-						printf("Send File:\t%s Failed!\n", file_name);  
-						break;  
-					}  
-					bzero(buffer, sizeof(buffer));  
-
-					// print log
-					count_size = count_size + sizeof(buffer);
-					if(count_size >= part) {
-						count_size = count_size - part;
-						++count;
-						time_t rawtime;
-						struct tm *timeinfo;
-						time ( &rawtime );
-						timeinfo = localtime ( &rawtime );
-
-						printf("%d%% %d/%d/%d %d:%d:%d\n", count*5, 
-								timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
-								timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-					} 
+			bzero(buffer, sizeof(buffer));  
+			int file_block_length = 0;  
+			int count = 0;
+			int count_size = 0;
+			while( (file_block_length = fread(buffer, sizeof(char), sizeof(buffer), fp)) > 0) {  
+				// send buffer to client
+				if (sendto(sockfd, buffer, file_block_length, 0, (struct sockaddr *)&peeraddr, peerlen) < 0) {
+					printf("Send File:\t%s Failed!\n", file_name);  
+					break;  
 				}  
-				// if the final size is small than part
-				if(count != 20) {
+				bzero(buffer, sizeof(buffer));  
+
+				// print log
+				count_size = count_size + sizeof(buffer);
+				if(count_size >= part) {
+					count_size = count_size - part;
+					++count;
 					time_t rawtime;
 					struct tm *timeinfo;
 					time ( &rawtime );
 					timeinfo = localtime ( &rawtime );
 
-					printf("%d%% %d/%d/%d %d:%d:%d\n", 100, 
+					printf("%d%% %d/%d/%d %d:%d:%d\n", count*5, 
 							timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
-							timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);		
-				}
-				fclose(fp);  
-				printf("File:\t%s Transfer Finished!\n", file_name);  
+							timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+				} 
 			}  
-		}
-		else {
-			sendto(sockfd, "msg", 3, 0, (struct sockaddr *)&peeraddr, peerlen);
-			int size = strlen(buffer);
-			int part = round(size/20);
-			// set the smallest part
-			if(part == 0) part = 1;
-
-			int count = 0;
-			int count_size = 0;
-			// record length of pointer p
-			int str_p = 0;
-			// use pointer p to send one part of message
-			char *p = buffer;
-			while(1) {
-				// send buffer to client 
-				n = sendto(sockfd, p, part, 0, (struct sockaddr *)&peeraddr, peerlen);
-				if(n < 0) {  
-					printf("Send Failed!\n");  
-					break;  
-				}
-				if(n == 0) break;
-				if(str_p >= strlen(buffer)) break;
-				str_p += n;
-				p += n;
-				// print log
+			// if the final size is small than part
+			if(count != 20) {
 				time_t rawtime;
 				struct tm *timeinfo;
 				time ( &rawtime );
 				timeinfo = localtime ( &rawtime );
 
-				++count;
-				if(count < 20) {
-					printf("%d%% %d/%d/%d %d:%d:%d\n", count*5, 
-							timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
-							timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-				}
+				printf("%d%% %d/%d/%d %d:%d:%d\n", 100, 
+						timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
+						timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);		
 			}
+			fclose(fp);  
+			printf("File:\t%s Transfer Finished!\n", file_name);  
 			// send finish
-			n = sendto(sockfd, NULL, 0, 0, (struct sockaddr *)&peeraddr, peerlen);
-			// print final log
+			sendto(sockfd, NULL, 0, 0, (struct sockaddr *)&peeraddr, peerlen);
+		}  
+	}
+	else {
+		sendto(sockfd, "msg", 3, 0, (struct sockaddr *)&peeraddr, peerlen);
+		int size = strlen(buffer);
+		int part = round(size/20);
+		// set the smallest part
+		if(part == 0) part = 1;
+
+		int count = 0;
+		int count_size = 0;
+		// record length of pointer p
+		int str_p = 0;
+		// use pointer p to send one part of message
+		char *p = buffer;
+		while(1) {
+			// send buffer to client 
+			n = sendto(sockfd, p, part, 0, (struct sockaddr *)&peeraddr, peerlen);
+			if(n < 0) {  
+				printf("Send Failed!\n");  
+				break;  
+			}
+			if(n == 0) break;
+			if(str_p >= strlen(buffer)) break;
+			str_p += n;
+			p += n;
+			// print log
 			time_t rawtime;
 			struct tm *timeinfo;
 			time ( &rawtime );
 			timeinfo = localtime ( &rawtime );
-			while(count < 19) {
-				++count;
-				printf("%d%% %d/%d/%d %d:%d:%d\n", count*5,
+
+			++count;
+			if(count < 20) {
+				printf("%d%% %d/%d/%d %d:%d:%d\n", count*5, 
 						timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
 						timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 			}
-			printf("100%% %d/%d/%d %d:%d:%d\n", 
+		}
+		// send finish
+		n = sendto(sockfd, NULL, 0, 0, (struct sockaddr *)&peeraddr, peerlen);
+		// print final log
+		time_t rawtime;
+		struct tm *timeinfo;
+		time ( &rawtime );
+		timeinfo = localtime ( &rawtime );
+		while(count < 19) {
+			++count;
+			printf("%d%% %d/%d/%d %d:%d:%d\n", count*5,
 					timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
 					timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-			printf("I send a message: %s\n",buffer);
 		}
-//	}
-	//	}
+		printf("100%% %d/%d/%d %d:%d:%d\n", 
+				timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
+				timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+		printf("I send a message: %s\n",buffer);
+	}
 	close(sockfd);
 }
 
@@ -419,15 +412,15 @@ int main(int argc, char *argv[])
 		int sockfd, portno;
 		struct sockaddr_in serv_addr;
 		int tcp_ser = 0;
-		int ucp_ser = 0;
+		int udp_ser = 0;
 		// tcp use SOCK_STREAM
 		if (!strcmp(argv[1], "tcp")) {
 			tcp_ser = 1;
 			sockfd = socket(AF_INET, SOCK_STREAM, 0);
 		}
-		// ucp use SOCK_DGRAM
+		// udp use SOCK_DGRAM
 		else if (!strcmp(argv[1], "udp")) {
-			ucp_ser = 1;
+			udp_ser = 1;
 			sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 		}
 		if (sockfd < 0)
@@ -449,9 +442,9 @@ int main(int argc, char *argv[])
 		if (tcp_ser == 1) {
 			tcp_echo_ser(sockfd, buffer);
 		}
-		// ucp server
-		else if (ucp_ser == 1) {
-			ucp_echo_ser(sockfd, buffer);
+		// udp server
+		else if (udp_ser == 1) {
+			udp_echo_ser(sockfd, buffer);
 		}
 	}
 	else if(!strcmp(argv[2], "recv")) {

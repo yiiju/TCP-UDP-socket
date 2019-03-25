@@ -27,107 +27,20 @@ void ucp_echo_ser(int sockfd, char* msg)
 
 	peerlen = sizeof(peeraddr);
 	memset(buffer, 0, sizeof(buffer));
+//while(1) {
 	n = recvfrom(sockfd, buffer, sizeof(buffer), 0,
 			(struct sockaddr *)&peeraddr, &peerlen);
-	if (n < 0) error("ERROR reading from socket");
-	else if(n > 0)
-	{
-		if(!strcmp(buffer, "start\n")) {
-			bzero(buffer,1024);
-			strcpy(buffer, msg);
-			if(buffer[0] == '/') {
-				// img
-				//n = write(newsockfd, "img", 3);
-				sendto(sockfd, "img", 3, 0, (struct sockaddr *)&peeraddr, peerlen);
-				//if (n < 0) error("ERROR writing to socket");
-				char file_name[1024];  
-				bzero(file_name, sizeof(file_name));  
-				strcpy(file_name, buffer);  
-				FILE *fp = fopen(file_name, "r");  
-				if (fp == NULL) {  
-					printf("File:\t%s Not Found!\n", file_name);  
-				}  
-				else {
-					// store the size of fp
-					fseek(fp, 0, SEEK_END);
-					int size = ftell(fp);
-					fseek(fp, 0, SEEK_SET);
-					// print total size
-					printf("Total size of file: %d\n",size);
-					// use part to get size of every 5%
-					int part = size/20;
-					
-					bzero(buffer, sizeof(buffer));  
-					int file_block_length = 0;  
-					int count = 0;
-					int count_size = 0;
-					while( (file_block_length = fread(buffer, sizeof(char), sizeof(buffer), fp)) > 0) {  
-						// send buffer to client
-						if (sendto(sockfd, buffer, file_block_length, 0, (struct sockaddr *)&peeraddr, peerlen) < 0) {
-							printf("Send File:\t%s Failed!\n", file_name);  
-							break;  
-						}  
-						bzero(buffer, sizeof(buffer));  
-
-						// print log
-						count_size = count_size + sizeof(buffer);
-						if(count_size >= part) {
-							count_size = count_size - part;
-							++count;
-							time_t rawtime;
-							struct tm *timeinfo;
-							time ( &rawtime );
-							timeinfo = localtime ( &rawtime );
-
-							printf("%d%% %d/%d/%d %d:%d:%d\n", count*5, 
-									timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
-									timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-						} 
-					}  
-					// if the final size is small than part
-					if(count != 20) {
-						time_t rawtime;
-						struct tm *timeinfo;
-						time ( &rawtime );
-						timeinfo = localtime ( &rawtime );
-
-						printf("%d%% %d/%d/%d %d:%d:%d\n", 100, 
-								timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
-								timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);		
-					}
-					fclose(fp);  
-					printf("File:\t%s Transfer Finished!\n", file_name);  
-				}  
-			}
-			else {
-				sendto(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&peeraddr, peerlen);
-				printf("I send a message: %s\n",buffer);
-			}
-		}
-	}
-	close(sockfd);
-}
-
-void tcp_echo_ser(int sockfd, char* msg)
-{
-	socklen_t clilen;
-	struct sockaddr_in cli_addr;
-	char buffer[1024];
-	int newsockfd, n;
-
-	clilen = sizeof(cli_addr);
-	newsockfd = accept(sockfd,
-			(struct sockaddr *) &cli_addr, &clilen);
-	if (newsockfd < 0) error("ERROR on accept");
-	bzero(buffer,1024);
-	n = read(newsockfd,buffer,1023);
-	if (n < 0) error("ERROR reading from socket");
-	if(!strcmp(buffer, "start\n")) {
+//	printf("%d\n",n);
+//	if (n < 0) error("ERROR reading from socket");
+//	else if(n > 0)
+//	{
+		//		if(!strcmp(buffer, "start\n")) {
 		bzero(buffer,1024);
 		strcpy(buffer, msg);
 		if(buffer[0] == '/' || buffer[0] == '.') {
 			// img
-			n = write(newsockfd, "img", 3);
+			//n = write(newsockfd, "img", 3);
+			n = sendto(sockfd, "img", 3, 0, (struct sockaddr *)&peeraddr, peerlen);
 			if (n < 0) error("ERROR writing to socket");
 			char file_name[1024];  
 			bzero(file_name, sizeof(file_name));  
@@ -151,8 +64,8 @@ void tcp_echo_ser(int sockfd, char* msg)
 				int count = 0;
 				int count_size = 0;
 				while( (file_block_length = fread(buffer, sizeof(char), sizeof(buffer), fp)) > 0) {  
-					// send buffer to client 
-					if (send(newsockfd, buffer, file_block_length, 0) < 0) {  
+					// send buffer to client
+					if (sendto(sockfd, buffer, file_block_length, 0, (struct sockaddr *)&peeraddr, peerlen) < 0) {
 						printf("Send File:\t%s Failed!\n", file_name);  
 						break;  
 					}  
@@ -189,8 +102,11 @@ void tcp_echo_ser(int sockfd, char* msg)
 			}  
 		}
 		else {
+			sendto(sockfd, "msg", 3, 0, (struct sockaddr *)&peeraddr, peerlen);
 			int size = strlen(buffer);
 			int part = round(size/20);
+			// set the smallest part
+			if(part == 0) part = 1;
 
 			int count = 0;
 			int count_size = 0;
@@ -200,17 +116,14 @@ void tcp_echo_ser(int sockfd, char* msg)
 			char *p = buffer;
 			while(1) {
 				// send buffer to client 
-				n = send(newsockfd, p, part, 0); 
-				if (n < 0) {  
+				n = sendto(sockfd, p, part, 0, (struct sockaddr *)&peeraddr, peerlen);
+				if(n < 0) {  
 					printf("Send Failed!\n");  
 					break;  
-				}  
+				}
+				if(n == 0) break;
 				if(str_p >= strlen(buffer)) break;
 				str_p += n;
-				if(str_p == n) {
-					printf("Send Log\n");
-					continue;
-				}
 				p += n;
 				// print log
 				time_t rawtime;
@@ -225,20 +138,164 @@ void tcp_echo_ser(int sockfd, char* msg)
 							timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 				}
 			}
-
+			// send finish
+			n = sendto(sockfd, NULL, 0, 0, (struct sockaddr *)&peeraddr, peerlen);
 			// print final log
 			time_t rawtime;
 			struct tm *timeinfo;
 			time ( &rawtime );
 			timeinfo = localtime ( &rawtime );
+			while(count < 19) {
+				++count;
+				printf("%d%% %d/%d/%d %d:%d:%d\n", count*5,
+						timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
+						timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+			}
 			printf("100%% %d/%d/%d %d:%d:%d\n", 
 					timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
 					timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
 			printf("I send a message: %s\n",buffer);
 		}
-		close(newsockfd);
-		close(sockfd);
+//	}
+	//	}
+	close(sockfd);
+}
+
+void tcp_echo_ser(int sockfd, char* msg)
+{
+	socklen_t clilen;
+	struct sockaddr_in cli_addr;
+	char buffer[1024];
+	int newsockfd, n;
+
+	clilen = sizeof(cli_addr);
+	newsockfd = accept(sockfd,
+			(struct sockaddr *) &cli_addr, &clilen);
+	if (newsockfd < 0) error("ERROR on accept");
+	bzero(buffer,1024);
+	strcpy(buffer, msg);
+	if(buffer[0] == '/' || buffer[0] == '.') {
+		// img
+		n = write(newsockfd, "img", 3);
+		if (n < 0) error("ERROR writing to socket");
+		char file_name[1024];  
+		bzero(file_name, sizeof(file_name));  
+		strcpy(file_name, buffer);  
+		FILE *fp = fopen(file_name, "r");  
+		if (fp == NULL) {  
+			printf("File:\t%s Not Found!\n", file_name);  
+		}  
+		else {
+			// store the size of fp
+			fseek(fp, 0, SEEK_END);
+			int size = ftell(fp);
+			fseek(fp, 0, SEEK_SET);
+			// print total size
+			printf("Total size of file: %d\n",size);
+			// use part to get size of every 5%
+			int part = size/20;
+
+			bzero(buffer, sizeof(buffer));  
+			int file_block_length = 0;  
+			int count = 0;
+			int count_size = 0;
+			while( (file_block_length = fread(buffer, sizeof(char), sizeof(buffer), fp)) > 0) {  
+				// send buffer to client 
+				if (send(newsockfd, buffer, file_block_length, 0) < 0) {  
+					printf("Send File:\t%s Failed!\n", file_name);  
+					break;  
+				}  
+				bzero(buffer, sizeof(buffer));  
+
+				// print log
+				count_size = count_size + sizeof(buffer);
+				if(count_size >= part) {
+					count_size = count_size - part;
+					++count;
+					time_t rawtime;
+					struct tm *timeinfo;
+					time ( &rawtime );
+					timeinfo = localtime ( &rawtime );
+
+					printf("%d%% %d/%d/%d %d:%d:%d\n", count*5, 
+							timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
+							timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+				} 
+			}  
+			// if the final size is small than part
+			if(count != 20) {
+				time_t rawtime;
+				struct tm *timeinfo;
+				time ( &rawtime );
+				timeinfo = localtime ( &rawtime );
+
+				printf("%d%% %d/%d/%d %d:%d:%d\n", 100, 
+						timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
+						timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);		
+			}
+			fclose(fp);  
+			printf("File:\t%s Transfer Finished!\n", file_name);  
+		}  
 	}
+	else {
+		n = send(newsockfd, "msg", 3, 0); 
+		if(n < 0) {  
+			printf("Send Failed!\n");   
+		}
+		int size = strlen(buffer);
+		int part = round(size/20);
+		// set the smallest part
+		if(part == 0) part = 1;
+
+		int count = 0;
+		int count_size = 0;
+		// record length of pointer p
+		int str_p = 0;
+		// use pointer p to send one part of message
+		char *p = buffer;
+		while(1) {
+			// send buffer to client 
+			n = send(newsockfd, p, part, 0); 
+			if(n < 0) {  
+				printf("Send Failed!\n");  
+				break;  
+			}
+			if(n == 0) break;
+			if(str_p >= strlen(buffer)) break;
+			str_p += n;
+			p += n;
+			// print log
+			time_t rawtime;
+			struct tm *timeinfo;
+			time ( &rawtime );
+			timeinfo = localtime ( &rawtime );
+
+			++count;
+			if(count < 20) {
+				printf("%d%% %d/%d/%d %d:%d:%d\n", count*5, 
+						timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
+						timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+			}
+		}
+
+		// print final log
+		time_t rawtime;
+		struct tm *timeinfo;
+		time ( &rawtime );
+		timeinfo = localtime ( &rawtime );
+		while(count < 19) {
+			++count;
+			printf("%d%% %d/%d/%d %d:%d:%d\n", count*5,
+					timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
+					timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+		}
+		printf("100%% %d/%d/%d %d:%d:%d\n", 
+				timeinfo->tm_year+1900, timeinfo->tm_mon+1, timeinfo->tm_mday, 
+				timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+		printf("I send a message: %s\n",buffer);
+	}
+	close(newsockfd);
+	close(sockfd);
 }
 void udp_cli(int sockfd, int portno)
 {
@@ -251,14 +308,12 @@ void udp_cli(int sockfd, int portno)
 	servaddr.sin_addr.s_addr = INADDR_ANY;
 	servaddr.sin_port = htons(portno);
 
-	printf("Type \"start\" to get start: ");
-	bzero(buffer,1024);
-	fgets(buffer, sizeof(buffer), stdin);
-	sendto(sockfd, buffer, strlen(buffer), 0, 
+	// send something to server
+	sendto(sockfd, "udp", 3, 0, 
 			(struct sockaddr *)&servaddr, sizeof(servaddr));
 
 	bzero(buffer,1024);
-	n = recvfrom(sockfd, buffer, sizeof(buffer), 0, NULL, NULL);
+	n = recvfrom(sockfd, buffer, 3, 0, NULL, NULL);
 	if (n < 0) error("ERROR reading from socket");
 	if(!strcmp(buffer, "img")) {
 		bzero(buffer,1024);
@@ -287,8 +342,19 @@ void udp_cli(int sockfd, int portno)
 		fclose(fp);  
 	}
 	else {
+		char msg[1024];
+		bzero(msg, 1024);
+		bzero(buffer, sizeof(buffer));
+		while(n = recvfrom(sockfd, buffer, sizeof(buffer), 0, NULL, NULL)) {
+			if (n < 0) {  
+				printf("Recieve Data From Server Failed!\n");  
+				break;  
+			} 
+			strcat(msg, buffer);
+			bzero(buffer, sizeof(buffer));
+		}
 		printf("The message is: ");
-		printf("%s\n",buffer);
+		printf("%s\n", msg);
 	}
 	close(sockfd);
 }
@@ -297,17 +363,8 @@ void tcp_cli(int sockfd)
 {
 	int n;
 	char buffer[1024];
-	printf("Type \"start\" to get start: ");
 	bzero(buffer,1024);
-	fgets(buffer,1023,stdin);
-	n = write(sockfd,buffer,strlen(buffer));
-	if (n < 0) {
-		printf("%d\n",sockfd);
-		error("ERROR writing to socket");
-	}
-
-	bzero(buffer,1024);
-	n = read(sockfd,buffer,1023);
+	n = read(sockfd,buffer,3);
 	if (n < 0) error("ERROR reading from socket");
 	if(!strcmp(buffer, "img")) {
 		bzero(buffer,1024);
